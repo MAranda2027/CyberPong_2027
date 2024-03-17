@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <title>CyberPong 2027 - Local 1 VS. 1</title>
+  <style>
+
+@font-face {
+    font-family: hacked;
+    src: url(hacked.ttf)
+}
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: white;
+      color: #fff;
+      text-align: center;
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-image: url(localbg.png);
+    }
+    
+    .title {
+      color:white;
+      margin-bottom: 100px;
+      font-family: 'hacked', display;
+    }
+
+    h1, h2 {
+      color: white;
+      background-color: black; 
+    }
+    button {
+      font-size: 30px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    button:hover {
+    background-color: #cf1717;
+    transform: scale(1.1);
+    box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.3);
+    color: black;
+}
+    canvas {
+      background-color: black;
+      border: 2px solid #fff;
+      box-shadow: 0 0 30px 15px rgba(255, 240, 0);
+    }
+    .cursor {
+      cursor: crosshair;
+    }
+    .title {
+      color:black;
+    }
+    #restart {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #mainmenu {
+      justify-content: center;
+    }
+  </style>
+</head>
+<body class="cursor">
+  <div class="title">  <h1>CyberPong 2027</h1>
+    <h2>Local 1 VS. 1: Male V VS. Female V</h2>
+    <br>
+    <div><canvas id="gameCanvas" width="1120" height="560"></canvas></div>
+    <button id="restart" type="button" onclick="restart()"> RESTART</button> <br>
+    <button id="mainmenu" style="justify-content: center;" type="button" onclick="window.location.href='test.html'"> MAIN MENU</button>
+</div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    var gameState = 'running'
+
+    const paddleWidth = 20;
+    const paddleHeight = 140;
+    const ballSize = 20;
+
+    var ballX = canvas.width / 2;
+    var ballY = canvas.height / 2;
+    var ballSpeedX = 5;
+    var ballSpeedY = 5;
+
+    var player1Y = canvas.height / 2 - paddleHeight / 2;
+    var player2Y = canvas.height / 2 - paddleHeight / 2;
+
+    var player1Score = 0;
+    var player2Score = 0;
+
+    var userHasInteracted = 0;
+
+    const paddleSpeedP1 = 10;
+    const paddleSpeedP2 = 10;
+
+    const collisionSound = new Audio('toink-8bit-84481.mp3');
+    const paddleCollisionSound = new Audio('jump_c_02-102843.mp3');
+    collisionSound.volume = 0.09
+    paddleCollisionSound.volume = 0.5
+
+    const powerUpWidth = 100
+    const powerUpHeight = powerUpWidth
+
+    const empBlastPow = new Image()
+    empBlastPow.crossOrigin = "";
+    empBlastPow.src = 'https://i.imgur.com/bG2K7cv.png'
+    const reprogramPow = new Image()
+    reprogramPow.crossOrigin = "";
+    reprogramPow.src = 'https://i.imgur.com/3yK3CZE.png'  
+    const dataDistortionPow = new Image()
+    dataDistortionPow.crossOrigin = "";
+    dataDistortionPow.src = 'https://i.imgur.com/wwjPHST.png'
+    
+    var powerUpList = []
+    var powerUpCheckLoop = 0
+    var anyPowerUpActive = false
+    var timeSinceLastPow = 0
+
+    function restart() {
+      window.location.reload();
+    }
+
+    function powSpawnTimer() {
+      timeSinceLastPow++
+      if(timeSinceLastPow >= 10){
+        clearInterval(powSpawnTimerOBJ)
+      }
+    }
+
+    var imageData
+    var pixelsDistort
+    function distortLeftSide() {  
+      imageData = ctx.getImageData(0, 0, canvas.width/2, canvas.height)
+      pixelsDistort = new Uint32Array(imageData.data.buffer);
+
+      for (var i = 0; i < pixelsDistort.length; i++) {
+        const randomIndex = Math.floor(Math.random() * pixelsDistort.length / 2) + pixelsDistort.length / 2; // Shuffle only within the left half
+        const temp = pixelsDistort[i];
+        pixelsDistort[i] = pixelsDistort[randomIndex];
+        pixelsDistort[randomIndex] = temp;
+      }
+
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(pixelsDistort.buffer), imageData.width, imageData.height), 0, 0);
+    }
+
+    function distortRightSide() {
+      imageData = ctx.getImageData(canvas.width / 2, 0, canvas.width / 2, canvas.height); // Get data from the right half
+      pixelsDistort = new Uint32Array(imageData.data.buffer);
+
+      // Shuffle pixelsDistort within the right half of the canvas
+      for (var i = 0; i < pixelsDistort.length; i++) {
+        const randomIndex = Math.floor(Math.random() * pixelsDistort.length / 2); // Shuffle only within the right half
+        const temp = pixelsDistort[i];
+        pixelsDistort[i] = pixelsDistort[randomIndex];
+        pixelsDistort[randomIndex] = temp;
+      }
+
+      // Put the shuffled pixelsDistort back onto the canvas (right half)
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(pixelsDistort.buffer), imageData.width, imageData.height), canvas.width / 2, 0);
+    }
+
+    function generatePowerUp() {
+      if(anyPowerUpActive ==  true || powerUpList.length >= 3 || timeSinceLastPow < 10){return}
+      timeSinceLastPow = 0
+      var choosePowerUp = Math.ceil((Math.random() * (3 - 0) + 0))
+      var chosenPowerUp = null;
+      switch(choosePowerUp) {
+        case 1:
+          chosenPowerUp = empBlastPow
+          break;
+        case 2:
+          chosenPowerUp = reprogramPow
+          break;
+        case 3:
+          chosenPowerUp = dataDistortionPow
+          break;
+      }
+      if(powerUpList.length < 3){
+        
+        var positionRandomizerCheck = false
+        while(positionRandomizerCheck == false) {
+          var nonAcceptableRange = [ballX + 5, ballX - 5, ballY + 5, ballY - 5]
+          var powerUpRangeX = Math.random() * ((canvas.width - (canvas.width * (2/10))) - (canvas.width * (2/10))) + (canvas.width * (2/10));
+          var powerUpRangeY = Math.random() * ((canvas.height - (canvas.height * (2/10))) - (canvas.height * (2/10))) + (canvas.height * (2/10));
+          if(powerUpRangeX < nonAcceptableRange[0] &&
+             powerUpRangeX > nonAcceptableRange[1] &&
+             powerUpRangeY < nonAcceptableRange[2] &&
+             powerUpRangeY > nonAcceptableRange[3])
+          {
+          }
+          else {
+            positionRandomizerCheck = true
+          }
+        }
+
+        powerUpList.push(chosenPowerUp, powerUpRangeX, powerUpRangeY)
+      }
+    }
+
+    var powSpawnTimerOBJ;
+    function powerUpCollision(powX, powY, powName) {
+      if(powX + powerUpWidth >= ballX && powX <= ballX + ballSize && powY <= ballY + ballSize && powY + powerUpHeight >= ballY){
+        for(var i = 0; i < 3; i++){
+          powerUpList.splice(powerUpList[powerUpList.length],1)
+        }
+        anyPowerUpActive = true
+        powerUpEffect(powName)
+      }
+    }
+
+    var permissionToRun = false
+    var powerUpTargetStatic
+    var powerUpCancel
+    function powerUpEffect(powerupName) {
+      powerUpCancel = null
+      powerUpTargetStatic = null
+      if(powerupName == empBlastPow){
+        if(powerUpRunning == false){
+          powerUpTargetStatic = powTarget
+          permissionToRun = true
+          powerUpCancel = null
+          powerUpCancel = setInterval(() => { empBlast() }, 1000 / 5);
+        }
+        
+      }
+      else if(powerupName == reprogramPow){
+        if(powerUpRunning == false){
+          powerUpTargetStatic = powTarget
+          permissionToRun = true
+          powerUpCancel = null
+          powerUpCancel = setInterval(() => { reprogram() }, 1000 / 5);
+        }
+
+      }
+      else if(powerupName == dataDistortionPow){
+        if(powerUpRunning == false){
+          powerUpTargetStatic = powTarget
+          permissionToRun = true
+          powerUpCancel = null
+          powerUpCancel = setInterval(() => { dataDistortion() }, 1000 / 5);
+        }
+
+      }
+    }
+
+    var powerUpTimer = 0
+    var powerUpRunning = false
+    function empBlast() {
+      if(permissionToRun == false){ return }
+        powerUpTimer++
+        if(powerUpTimer <= 25){
+        powerUpRunning = true
+        
+        var randomDirection = (Math.random() * (15 - 5) + 5)
+        var randomSpeed = Math.ceil((Math.random() * (150 - 50) + 50))
+
+        if(powerUpTargetStatic == 'player1') {
+          blockInputP1 = true
+          paddleColor1 = '#008000'
+          if(randomDirection > 10){
+            player1Y = Math.max(0, player1Y - randomSpeed);
+          } else {
+            player1Y = Math.min(canvas.height - paddleHeight, player1Y + randomSpeed);
+          }
+        
+          
+        } else if(powerUpTargetStatic == 'player2') {
+          blockInputP2 = true
+          paddleColor2 = '#008000'
+          if(randomDirection > 10){
+            player2Y = Math.max(0, player1Y - randomSpeed);
+          } else {
+            player2Y = Math.min(canvas.height - paddleHeight, player1Y + randomSpeed);
+          }
+        }
+      } else if(powerUpTimer > 25) {
+        powSpawnTimerOBJ = setInterval(() => { powSpawnTimer() }, 1000 / 5);
+        permissionToRun = false
+        powerUpTimer = 0
+        blockInputP1 = false
+        blockInputP2 = false
+        anyPowerUpActive = false
+        paddleColor1 = '#FFFF00'
+        paddleColor2 = '#FFAE42'
+        powerUpRunning = false
+        clearInterval(powerUpCancel)
+      }
+    }
+
+    function reprogram() {
+      if(permissionToRun == false){ return }
+        powerUpTimer++
+        if(powerUpTimer <= 30){
+        powerUpRunning = true
+
+        if(powerUpTargetStatic == 'player1') {
+          paddleColor1 = '#A020F0'
+          reprogramVelocityP1 = -1
+          
+        } else if(powerUpTargetStatic == 'player2') {
+          paddleColor2 = '#A020F0'
+          reprogramVelocityP2 = -1
+        }
+      } else if(powerUpTimer > 30) {
+        powSpawnTimerOBJ = setInterval(() => { powSpawnTimer() }, 1000 / 5);
+        reprogramVelocityP1 = 1
+        reprogramVelocityP2 = 1
+        permissionToRun = false
+        powerUpTimer = 0  
+        anyPowerUpActive = false
+        paddleColor1 = '#FFFF00'
+        paddleColor2 = '#FFAE42'
+        powerUpRunning = false
+        clearInterval(powerUpCancel)
+      }
+    }
+
+    var sideToDistort = 'none'
+    function dataDistortion() {
+      if(permissionToRun == false){ return }
+        powerUpTimer++
+        if(powerUpTimer <= 35){
+        powerUpRunning = true
+
+        if(powerUpTargetStatic == 'player1') {
+          sideToDistort = 'left'
+        } else if(powerUpTargetStatic == 'player2') {
+          sideToDistort = 'right'
+        }
+      } else if(powerUpTimer > 35) {
+        powSpawnTimerOBJ = setInterval(() => { powSpawnTimer() }, 1000 / 5);
+        sideToDistort = 'none'
+        permissionToRun = false
+        powerUpTimer = 0
+        anyPowerUpActive = false
+        powerUpRunning = false
+        clearInterval(powerUpCancel)
+      }
+    }
+
+    function disortOverlay() {
+      if(sideToDistort == 'left'){
+        distortLeftSide()
+      } else if(sideToDistort == 'right'){
+        distortRightSide()
+      }
+    }
+
+    function drawPowerUps() {
+      for (var i = 0; i < powerUpList.length; i += 3) {
+        var image = powerUpList[i];
+        var x = powerUpList[i + 1];
+        var y = powerUpList[i + 2];
+        ctx.drawImage(image, x, y);
+        powerUpCheckLoop = 0
+        powerUpCollision(x, y, image)
+      }
+    }
+    
+    powSpawnTimerOBJ = setInterval(() => { powSpawnTimer() }, 1000 / 5);
+    var paddleColor1 = '#FFFF00'
+    var paddleColor2 = '#FFAE42'
+// Trail properties
+var trail = [];
+var trailLength = 20;
+var trailColor = '#00FFFF'; // Initial color for the trail
+
+function draw() {
+  // Clear the canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw paddles
+  ctx.fillStyle = paddleColor1;
+  ctx.fillRect(0, player1Y, paddleWidth, paddleHeight);
+  ctx.fillStyle = paddleColor2;
+  ctx.fillRect(canvas.width - paddleWidth, player2Y, paddleWidth, paddleHeight);
+
+  // Draw ball and its trail
+  drawBall();
+
+  // Draw power-ups
+  drawPowerUps();
+
+  // Draw scores
+  ctx.font = '30px hacked';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('Player 1: ' + player1Score, 200, 50);
+  ctx.fillText('Player 2: ' + player2Score, canvas.width - 400, 50);
+
+  if (player1Score >= 10 || player2Score >= 10) {
+    // Display victory screen
+    gameState = 'done';
+    ctx.font = '30px hacked';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 30);
+    if (player1Score >= 10) {
+      ctx.fillText('Player 1    ...Wins!', canvas.width / 2, canvas.height / 2 + 10);
+    } else {
+      ctx.fillText('Player 2    ...Wins!', canvas.width / 2, canvas.height / 2 + 10);
+    }
+    return;
+  }
+}
+
+function drawBall() {
+  // Update the trail with the current ball position
+  trail.push({ x: ballX, y: ballY });
+
+  // Remove oldest trail segments if the trail is too long
+  if (trail.length > trailLength) {
+    trail.shift();
+  }
+
+  // Draw the trail
+  for (let i = 0; i < trail.length; i++) {
+    let transparency = i / trail.length; // Fade out the trail
+    ctx.fillStyle = `rgba(255, 240, 0, ${transparency})`; // Use trailColor with fading transparency
+    ctx.fillRect(trail[i].x - ballSize / 2, trail[i].y - ballSize / 2, ballSize, ballSize);
+  }
+
+  // Draw the ball
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(ballX - ballSize / 2, ballY - ballSize / 2, ballSize, ballSize);
+}
+    
+    
+    var powTarget;
+    var blockInputP1 = false
+    var blockInputP2 = false
+    var reprogramVelocityP1 = 1
+    var reprogramVelocityP2 = 1
+    function update() {
+      // Move the ball
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      // Ball collision with top and bottom walls
+      if (ballY - ballSize / 2 < 0 || ballY + ballSize / 2 > canvas.height) {
+        ballSpeedY = -ballSpeedY;
+        if(userHasInteracted > 0){collisionSound.play()};
+      }
+
+      // Ball collision with paddles
+      if (
+        (ballX - ballSize / 2 <= paddleWidth && ballY > player1Y && ballY < player1Y + paddleHeight) ||
+        (ballX + ballSize / 2 >= canvas.width - paddleWidth && ballY > player2Y && ballY < player2Y + paddleHeight)
+      ) {
+        ballSpeedX = -ballSpeedX;          
+        if(userHasInteracted > 0){paddleCollisionSound.play()}
+      }
+
+      // Ball goes past left or right boundary
+      if (ballX - ballSize / 2 < 0) {
+        player2Score++;
+        resetBall();
+      } else if (ballX + ballSize / 2 > canvas.width) {
+        player1Score++;
+        resetBall();
+      }
+
+      // Check
+      if(ballSpeedX > 0) {
+        powTarget = 'player2'
+      } else if(ballSpeedX < 0){
+        powTarget = 'player1'
+      }
+
+      // Move player paddles
+      
+      if (upPressed && blockInputP1 == false) {
+        if(reprogramVelocityP1 > 0){
+          player1Y = (Math.max(0, player1Y - paddleSpeedP1));
+        } else {
+          player1Y = Math.min(canvas.height - paddleHeight, player1Y + paddleSpeedP1);
+        }
+      }
+      if (downPressed  && blockInputP1 == false) {
+        if(reprogramVelocityP1 > 0){
+          player1Y = Math.min(canvas.height - paddleHeight, player1Y + paddleSpeedP1);
+        } else {
+          player1Y = (Math.max(0, player1Y - paddleSpeedP1));
+        }
+         
+      }
+
+      // Player 2 Movement
+      if (rightPressed && blockInputP2 == false) {
+        if(reprogramVelocityP2 > 0){
+          player2Y = Math.max(0, player2Y - paddleSpeedP2);
+        } else {
+          player2Y = Math.min(canvas.height - paddleHeight, player2Y + paddleSpeedP2);
+        }
+      }
+      if (leftPressed && blockInputP2 == false) {
+        if(reprogramVelocityP2 > 0){
+          player2Y = Math.min(canvas.height - paddleHeight, player2Y + paddleSpeedP2);
+        } else {
+          player2Y = Math.max(0, player2Y - paddleSpeedP2);
+        }
+         
+      }
+    }
+
+    function resetBall() {
+      ballX = canvas.width / 2;
+      ballY = canvas.height / 2;
+      ballSpeedX = Math.random() < 0.5 ? -5 : 5; // Randomize ball direction
+      ballSpeedY = 5;
+    }
+
+    var upPressed = false;
+    var downPressed = false;
+    var leftPressed = false;
+    var rightPressed = false;
+
+    document.addEventListener('keydown', keyDownHandler);
+    document.addEventListener('keyup', keyUpHandler);
+
+    function keyDownHandler(event) {
+      if (event.key === 'w') {
+        userHasInteracted++
+        upPressed = true;
+      } else if (event.key === 's') {
+        userHasInteracted++
+        downPressed = true;
+      } else if (event.key === 'ArrowUp') {
+        userHasInteracted++
+        rightPressed = true;
+      } else if (event.key === 'ArrowDown') {
+        userHasInteracted++
+        leftPressed = true;
+      }
+    }
+
+    function keyUpHandler(event) {
+      if (event.key === 'w') {
+        userHasInteracted++
+        upPressed = false;
+      } else if (event.key === 's') {
+        userHasInteracted++
+        downPressed = false;
+      } else if (event.key === 'ArrowUp') {
+        userHasInteracted++
+        rightPressed = false;
+      } else if (event.key === 'ArrowDown') {
+        userHasInteracted++
+        leftPressed = false;
+      }
+    }
+
+    function gameLoop() {
+      if(gameState == 'done') { return }
+      update();
+      draw();
+      disortOverlay()
+      generatePowerUp()
+    }
+
+    setInterval(gameLoop, 1000 / 90); // 90 frames per second
+  </script>
+</body>
+</html>
